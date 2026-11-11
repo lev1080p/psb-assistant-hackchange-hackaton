@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Юридический ассистент · ПСБ</title>
+  <style>
+    :root {
+      font-family: Inter, "Segoe UI", Arial, sans-serif;
+      color: #172442;
+      background: #f5f7fb;
+      font-synthesis: none;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; min-width: 320px; }
+    button, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, textarea:focus-visible { outline: 3px solid #85adff; outline-offset: 2px; }
+    .app { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 100dvh; }
+    .sidebar { display: flex; flex-direction: column; gap: 24px; padding: 27px 18px; background: #092958; color: #fff; }
+    .brand { display: flex; align-items: center; gap: 12px; padding: 0 10px; }
+    .brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: #2875e6; font-size: 19px; font-weight: 800; }
+    .brand-name { font-size: 18px; font-weight: 750; letter-spacing: -.02em; }
+    .brand-sub { margin-top: 3px; color: #aec6e9; font-size: 12px; }
+    .new-chat { width: 100%; padding: 12px 14px; border: 1px solid #6286b4; border-radius: 12px; background: #183d72; color: #fff; text-align: left; font-weight: 650; }
+    .new-chat:hover { background: #25518b; }
+    .sidebar-label { padding: 0 10px; color: #a8c2e5; font-size: 11px; font-weight: 750; letter-spacing: .11em; text-transform: uppercase; }
+    .sidebar-note { margin: -14px 10px 0; color: #d2e0f4; font-size: 13px; line-height: 1.6; }
+    .sidebar-bottom { margin-top: auto; padding: 16px 10px 0; border-top: 1px solid #355680; color: #a8c2e5; font-size: 12px; line-height: 1.5; }
+    .main { display: flex; flex-direction: column; min-width: 0; height: 100dvh; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 72px; padding: 0 34px; border-bottom: 1px solid #e2e8f2; background: #fff; }
+    .topbar-title { margin: 0; font-size: 16px; font-weight: 750; }
+    .topbar-sub { margin: 3px 0 0; color: #687995; font-size: 12px; }
+    .status { display: flex; align-items: center; gap: 8px; color: #556681; font-size: 12px; white-space: nowrap; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #a7b2c2; }
+    .status[data-state="ready"] .status-dot { background: #25a774; }
+    .status[data-state="error"] .status-dot { background: #dc6a55; }
+    .conversation { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
+    .conversation-inner { width: min(850px, 100%); min-height: 100%; margin: 0 auto; padding: 36px 28px 28px; }
+    .welcome { padding: clamp(20px, 7vh, 78px) 0 20px; }
+    .eyebrow { color: #326bc0; font-size: 12px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+    .welcome h2 { max-width: 650px; margin: 14px 0; font-size: clamp(28px, 4vw, 42px); line-height: 1.16; letter-spacing: -.045em; }
+    .welcome p { max-width: 610px; margin: 0; color: #61718c; font-size: 15px; line-height: 1.6; }
+    .prompts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 34px; }
+    .prompt { min-height: 98px; padding: 17px 18px; border: 1px solid #dde6f2; border-radius: 15px; background: #fff; box-shadow: 0 3px 16px #24426b08; color: #1c3155; text-align: left; line-height: 1.45; }
+    .prompt:hover { border-color: #95b8ec; background: #fafdff; }
+    .prompt small { display: block; margin-bottom: 8px; color: #3170c8; font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; }
+    .message { display: flex; gap: 14px; margin: 0 0 30px; }
+    .message.user { justify-content: flex-end; }
+    .avatar { flex: 0 0 32px; display: grid; place-items: center; height: 32px; border-radius: 10px; background: #dfeafa; color: #2364b4; font-size: 12px; font-weight: 800; }
+    .message-body { min-width: 0; max-width: 760px; }
+    .message.user .message-body { max-width: min(680px, 88%); padding: 13px 17px; border-radius: 17px 17px 4px 17px; background: #1959aa; color: #fff; }
+    .message.assistant .message-body { flex: 1; padding-top: 4px; }
+    .message-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; font-size: 14px; }
+    .message-type { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 11px; padding: 5px 9px; border-radius: 7px; background: #e8f1ff; color: #1858a8; font-size: 11px; font-weight: 750; }
+    .message-type.clarification { background: #fff1d8; color: #8b5a08; }
+    .message-type.insufficient { background: #eef0f5; color: #54627a; }
+    .message-type.error { background: #fff0eb; color: #a74735; }
+    .sources { margin-top: 18px; padding-top: 15px; border-top: 1px solid #e0e7f1; }
+    .sources-title { margin: 0 0 10px; color: #677994; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+    .claim { padding: 12px 0; border-top: 1px solid #e8edf4; }
+    .claim:first-of-type { border-top: 0; }
+    .claim .source-list { margin-top: 9px; }
+    .source-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .source-button { max-width: 100%; padding: 8px 11px; border: 1px solid #cbdcf2; border-radius: 9px; background: #fff; color: #1b5cae; font-size: 12px; font-weight: 650; text-align: left; overflow-wrap: anywhere; }
+    .source-button:hover { background: #edf5ff; }
+    .loading { display: flex; align-items: center; gap: 9px; color: #60728c; font-size: 13px; }
+    .spinner { width: 15px; height: 15px; border: 2px solid #c4d5ed; border-top-color: #2371d1; border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .composer-wrap { padding: 12px 28px 22px; background: linear-gradient(transparent, #f5f7fb 22%); }
+    .composer-inner { max-width: 850px; margin: 0 auto; }
+    .composer { display: flex; align-items: end; gap: 12px; padding: 10px 10px 10px 17px; border: 1px solid #cbd8e9; border-radius: 16px; background: #fff; box-shadow: 0 6px 24px #173a6c0d; }
+    .composer:focus-within { border-color: #6a9de2; box-shadow: 0 0 0 3px #bcd5f650; }
+    .composer textarea { flex: 1; min-width: 0; min-height: 26px; max-height: 150px; padding: 3px 0; resize: none; border: 0; outline: 0; color: #182b4a; background: transparent; line-height: 1.5; font-size: 14px; }
+    .composer textarea::placeholder { color: #8190a6; }
+    .send { flex: 0 0 38px; height: 38px; border: 0; border-radius: 10px; background: #1767c7; color: #fff; font-size: 21px; line-height: 1; }
+    .send:hover:not(:disabled) { background: #0c52a8; }
+    .send:disabled { background: #b8c6d8; cursor: not-allowed; }
+    .composer-help { margin: 9px 3px 0; color: #8190a6; font-size: 11px; line-height: 1.45; }
+    .viewer-backdrop { position: fixed; inset: 0; z-index: 8; background: #10244473; }
+    .viewer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 9; display: flex; flex-direction: column; width: min(620px, 100%); background: #fff; box-shadow: -14px 0 40px #10244420; }
+    .viewer-head { display: flex; justify-content: space-between; gap: 16px; padding: 24px; border-bottom: 1px solid #e1e8f2; }
+    .viewer-kicker { color: #3975c6; font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+    .viewer-title { margin: 7px 0 0; font-size: 19px; line-height: 1.35; overflow-wrap: anywhere; }
+    .close { flex: 0 0 32px; height: 32px; border: 0; border-radius: 8px; background: #eef3fa; color: #315176; font-size: 22px; }
+    .viewer-body { overflow-y: auto; padding: 25px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 22px; }
+    .meta span { padding: 6px 9px; border-radius: 7px; background: #eef3fa; color: #4e6483; font-size: 12px; }
+    .viewer-section { margin: 0 0 10px; color: #687995; font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+    .fragment-quote { margin: 0 0 24px; padding: 17px 19px; border-left: 3px solid #2875d5; border-radius: 0 9px 9px 0; background: #f1f6fd; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.65; font-size: 14px; }
+    .document-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; font-size: 13px; }
+    mark { padding: 2px 0; border-radius: 3px; background: #ffe7a0; color: inherit; }
+    .viewer-note { color: #6c7b90; font-size: 13px; line-height: 1.55; }
+    @media (max-width: 760px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .topbar { min-height: 63px; padding: 0 18px; }
+      .conversation-inner { padding: 24px 18px; }
+      .prompts { grid-template-columns: 1fr; }
+      .prompt { min-height: 72px; }
+      .composer-wrap { padding: 10px 14px 15px; }
+      .status span:last-child { display: none; }
+      .viewer-head, .viewer-body { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" aria-label="О приложении">
+      <div class="brand"><div class="brand-mark" aria-hidden="true">П</div><div><div class="brand-name">ПСБ · Право</div><div class="brand-sub">Юридический ассистент</div></div></div>
+      <button class="new-chat" id="newChat" type="button">＋ &nbsp;Новый диалог</button>
+      <div class="sidebar-label">Как это работает</div>
+      <p class="sidebar-note">Задайте вопрос по документам базы знаний. В ответе можно открыть положения, на которые опирается вывод.</p>
+      <div class="sidebar-bottom">Ответы формируются по предоставленным документам. Если сведений не хватает, ассистент попросит уточнение или объяснит ограничение.</div>
+    </aside>
+    <main class="main">
+      <header class="topbar"><div><h1 class="topbar-title">Юридический ассистент</h1><p class="topbar-sub">Вопросы по внутренним документам и нормативным актам</p></div><div class="status" id="status" data-state="idle" role="status"><span class="status-dot" aria-hidden="true"></span><span id="statusText">Ожидает вопрос</span></div></header>
+      <section class="conversation" id="conversation" aria-label="Диалог"><div class="conversation-inner" id="messages" aria-live="polite"></div></section>
+      <div class="composer-wrap"><div class="composer-inner"><form class="composer" id="chatForm"><textarea id="question" rows="1" maxlength="10000" aria-label="Ваш вопрос" placeholder="Спросите о договоре, регламенте или норме закона…" required></textarea><button class="send" id="send" type="submit" aria-label="Отправить вопрос" disabled>↑</button></form><p class="composer-help">Enter — отправить, Shift+Enter — новая строка. Укажите дату события и номер документа, если они известны.</p></div></div>
+    </main>
+  </div>
+  <div class="viewer-backdrop" id="viewerBackdrop" hidden></div>
+  <aside class="viewer" id="viewer" role="dialog" aria-modal="true" aria-labelledby="viewerTitle" hidden><div class="viewer-head"><div><div class="viewer-kicker">Источник из базы знаний</div><h2 class="viewer-title" id="viewerTitle"></h2></div><button class="close" id="closeViewer" type="button" aria-label="Закрыть документ">×</button></div><div class="viewer-body" id="viewerBody"></div></aside>
+  <script>
+    (() => {
+      "use strict";
+
+      // Эти два адреса можно задать до загрузки страницы через window.PSB_CHAT_API
+      // и window.PSB_DOCUMENT_API. Контракт ответа приведён в normalizeResponse().
+      const chatApi = window.PSB_CHAT_API || "/api/chat";
+      const documentApi = window.PSB_DOCUMENT_API || "/api/documents";
+      const el = (id) => document.getElementById(id);
+      const messages = el("messages");
+      const conversation = el("conversation");
+      const question = el("question");
+      const send = el("send");
+      const status = el("status");
+      const statusText = el("statusText");
+      const viewer = el("viewer");
+      const viewerBackdrop = el("viewerBackdrop");
+      const viewerBody = el("viewerBody");
+      let history = [];
+      let pending = false;
+      let activeRequest = null;
+      let previousFocus = null;
+      let viewerRequestId = 0;
+
+      function setStatus(state, label) { status.dataset.state = state; statusText.textContent = label; }
+      function scrollToEnd() { conversation.scrollTop = conversation.scrollHeight; }
+      function text(tag, value, className) {
+        const node = document.createElement(tag);
+        node.textContent = value;
+        if (className) node.className = className;
+        return node;
+      }
+      function resetWelcome() {
+        messages.replaceChildren();
+        const welcome = text("div", "", "welcome");
+        welcome.append(text("div", "Документы · основания · ответ", "eyebrow"));
+        welcome.append(text("h2", "Получите ответ с опорой на документы"));
+        welcome.append(text("p", "Опишите ситуацию и задайте вопрос. Ассистент покажет подтверждающие положения или уточнит, каких сведений не хватает."));
+        const prompts = text("div", "", "prompts");
+        [
+          ["Договор", "Какие условия поставки указаны в договоре П-17/2024?"],
+          ["Регламент", "Какой порядок согласования действовал на дату события?"],
+          ["Источники", "Какие документы нужно проверить перед заключением договора?"],
+          ["Уточнение", "Что нужно указать, чтобы определить применимую редакцию документа?"]
+        ].forEach(([label, value]) => {
+          const button = text("button", "", "prompt");
+          button.type = "button";
+          button.append(text("small", label), document.createTextNode(value));
+          button.addEventListener("click", () => { question.value = value; resizeQuestion(); question.focus(); });
+          prompts.append(button);
+        });
+        welcome.append(prompts);
+        messages.append(welcome);
+      }
+      function resizeQuestion() {
+        question.style.height = "auto";
+        question.style.height = Math.min(question.scrollHeight, 150) + "px";
+        send.disabled = pending || !question.value.trim();
+      }
+      function addUserMessage(value) {
+        messages.querySelector(".welcome")?.remove();
+        const row = text("div", "", "message user");
+        const body = text("div", "", "message-body");
+        body.append(text("p", value, "message-text"));
+        row.append(body);
+        messages.append(row);
+        scrollToEnd();
+      }
+      function addAssistantMessage(result) {
+        const row = text("div", "", "message assistant");
+        const body = text("div", "", "message-body");
+        row.append(text("div", "П", "avatar"), body);
+        const labels = { answer: "Ответ", clarification: "Нужно уточнение", insufficient: "Недостаточно оснований", error: "Ошибка соединения" };
+        const kind = result.status;
+        body.append(text("div", labels[kind] || labels.answer, "message-type " + kind));
+        body.append(text("p", result.text, "message-text"));
+        if (result.claims.length) {
+          const claims = text("div", "", "sources");
+          claims.append(text("p", "Основания по выводам", "sources-title"));
+          result.claims.forEach((claim) => {
+            const block = text("div", "", "claim");
+            block.append(text("p", claim.text, "message-text"));
+            const list = text("div", "", "source-list");
+            claim.fragment_ids.forEach((id) => {
+              const fragment = result.fragments.find((item) => item.id === id);
+              if (!fragment) return;
+              const label = [fragment.document_title || fragment.document_id || "Документ", fragment.section].filter(Boolean).join(" · ");
+              const button = text("button", label, "source-button");
+              button.type = "button";
+              button.addEventListener("click", () => openFragment(fragment));
+              list.append(button);
+            });
+            block.append(list);
+            claims.append(block);
+          });
+          body.append(claims);
+        } else if (result.fragments.length) {
+          const sources = text("div", "", "sources");
+          sources.append(text("p", "Подтверждающие положения", "sources-title"));
+          const list = text("div", "", "source-list");
+          result.fragments.forEach((fragment, index) => {
+            const label = [fragment.document_title || fragment.document_id || "Документ " + (index + 1), fragment.section].filter(Boolean).join(" · ");
+            const button = text("button", label, "source-button");
+            button.type = "button";
+            button.addEventListener("click", () => openFragment(fragment));
+            list.append(button);
+          });
+          sources.append(list);
+          body.append(sources);
+        }
+        messages.append(row);
+        scrollToEnd();
+      }
+      function normalizeResponse(data) {
+        if (!data || typeof data !== "object") throw new Error("Некорректный ответ сервера");
+        const rawStatus = data.status || data.type || "answer";
+        const mapped = { answer: "answer", clarification: "clarification", clarify: "clarification", insufficient: "insufficient", insufficient_evidence: "insufficient" };
+        const resultStatus = mapped[rawStatus];
+        if (!resultStatus) throw new Error("Неизвестный тип ответа сервера");
+        const answer = data.text ?? data.answer ?? data.question;
+        if (typeof answer !== "string" || !answer.trim()) throw new Error("Сервер вернул пустой ответ");
+        const rawFragments = data.fragments ?? data.sources ?? [];
+        if (!Array.isArray(rawFragments)) throw new Error("Некорректный список источников");
+        const fragments = rawFragments.filter((item) => item && typeof item === "object").map((item) => ({
+          id: String(item.fragment_id ?? item.id ?? ""),
+          document_id: String(item.document_id ?? ""),
+          document_title: String(item.document_title ?? item.document_name ?? item.title ?? ""),
+          section: String(item.section ?? item.provision ?? item.clause ?? ""),
+          text: String(item.text ?? item.quote ?? ""),
+          revision: String(item.revision ?? ""),
+          valid_from: String(item.valid_from ?? ""),
+          valid_to: String(item.valid_to ?? ""),
+          document_text: typeof item.document_text === "string" ? item.document_text : "",
+          start: Number.isInteger(item.start) ? item.start : null,
+          end: Number.isInteger(item.end) ? item.end : null
+        }));
+        const claims = Array.isArray(data.claims) ? data.claims.filter((claim) => claim && typeof claim.text === "string" && Array.isArray(claim.fragment_ids)).map((claim) => ({
+          text: claim.text,
+          fragment_ids: claim.fragment_ids.map(String)
+        })) : [];
+        return { status: resultStatus, text: answer.trim(), fragments, claims };
+      }
+      async function submitQuestion(value) {
+        const priorHistory = history.slice();
+        addUserMessage(value);
+        question.value = "";
+        pending = true;
+        resizeQuestion();
+        setStatus("idle", "Ищем основания…");
+        const loading = text("div", "", "message assistant");
+        loading.append(text("div", "П", "avatar"));
+        const loadingBody = text("div", "", "message-body loading");
+        loadingBody.append(text("span", "", "spinner"), text("span", "Анализируем документы…"));
+        loading.append(loadingBody);
+        messages.append(loading);
+        scrollToEnd();
+        const controller = new AbortController();
+        activeRequest = controller;
+        const timeout = setTimeout(() => controller.abort(), 60000);
+        try {
+          const response = await fetch(chatApi, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question: value, history: priorHistory }),
+            signal: controller.signal
+          });
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          const result = normalizeResponse(await response.json());
+          if (activeRequest !== controller) return;
+          loading.remove();
+          addAssistantMessage(result);
+          history.push({ role: "user", content: value }, { role: "assistant", content: result.text });
+          setStatus("ready", "Ответ получен");
+        } catch (error) {
+          if (activeRequest !== controller) return;
+          loading.remove();
+          const detail = error.name === "AbortError" ? "Сервер не ответил вовремя." : "Не удалось получить ответ от сервера.";
+          addAssistantMessage({ status: "error", text: detail + " Проверьте подключение и повторите вопрос.", fragments: [], claims: [] });
+          setStatus("error", "Нет ответа сервера");
+        } finally {
+          clearTimeout(timeout);
+          if (activeRequest === controller) { activeRequest = null; pending = false; resizeQuestion(); question.focus(); }
+        }
+      }
+      function highlightDocument(container, fullText, fragment) {
+        const quote = fragment.text;
+        let start = fragment.start;
+        let end = fragment.end;
+        if (start === null || end === null || start < 0 || end <= start || end > fullText.length || fullText.slice(start, end) !== quote) {
+          start = quote ? fullText.indexOf(quote) : -1;
+          end = start < 0 ? -1 : start + quote.length;
+        }
+        if (start < 0) { container.textContent = fullText; return; }
+        container.append(document.createTextNode(fullText.slice(0, start)));
+        const mark = text("mark", fullText.slice(start, end));
+        container.append(mark, document.createTextNode(fullText.slice(end)));
+        requestAnimationFrame(() => mark.scrollIntoView({ block: "center" }));
+      }
+      async function openFragment(fragment) {
+        const requestId = ++viewerRequestId;
+        previousFocus = document.activeElement;
+        viewer.hidden = false;
+        viewerBackdrop.hidden = false;
+        document.body.style.overflow = "hidden";
+        el("viewerTitle").textContent = fragment.document_title || fragment.document_id || "Документ";
+        viewerBody.replaceChildren();
+        const meta = text("div", "", "meta");
+        [fragment.section, fragment.revision && "Редакция: " + fragment.revision,
+          fragment.valid_from && "С: " + fragment.valid_from,
+          fragment.valid_to && "По: " + fragment.valid_to].filter(Boolean).forEach((value) => meta.append(text("span", value)));
+        viewerBody.append(meta, text("p", "Подтверждающий фрагмент", "viewer-section"));
+        viewerBody.append(text("blockquote", fragment.text || "Текст фрагмента не передан сервером.", "fragment-quote"));
+        const documentHeading = text("p", "Текст документа", "viewer-section");
+        const documentContent = text("div", "", "document-text");
+        viewerBody.append(documentHeading, documentContent);
+        el("closeViewer").focus();
+        if (fragment.document_text) { highlightDocument(documentContent, fragment.document_text, fragment); return; }
+        if (!fragment.document_id) {
+          documentContent.append(text("p", "Полный текст документа пока недоступен. Выше показан переданный сервером фрагмент.", "viewer-note"));
+          return;
+        }
+        documentContent.append(text("p", "Загружаем документ…", "viewer-note"));
+        try {
+          const response = await fetch(documentApi + "/" + encodeURIComponent(fragment.document_id));
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          const data = await response.json();
+          const fullText = typeof data === "string" ? data : data.text;
+          if (typeof fullText !== "string") throw new Error("Нет текста");
+          if (viewer.hidden || requestId !== viewerRequestId) return;
+          documentContent.replaceChildren();
+          highlightDocument(documentContent, fullText, fragment);
+        } catch (_) {
+          if (!viewer.hidden && requestId === viewerRequestId) documentContent.replaceChildren(text("p", "Полный текст документа пока недоступен. Выше показан переданный сервером фрагмент.", "viewer-note"));
+        }
+      }
+      function closeViewer() {
+        viewerRequestId++;
+        viewer.hidden = true;
+        viewerBackdrop.hidden = true;
+        document.body.style.overflow = "";
+        previousFocus?.focus();
+      }
+      el("chatForm").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const value = question.value.trim();
+        if (value && !pending) submitQuestion(value);
+      });
+      question.addEventListener("input", resizeQuestion);
+      question.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); el("chatForm").requestSubmit(); }
+      });
+      el("newChat").addEventListener("click", () => {
+        activeRequest?.abort(); activeRequest = null; pending = false; history = [];
+        question.value = ""; resizeQuestion(); closeViewer(); resetWelcome(); setStatus("idle", "Ожидает вопрос"); question.focus();
+      });
+      el("closeViewer").addEventListener("click", closeViewer);
+      viewerBackdrop.addEventListener("click", closeViewer);
+      document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !viewer.hidden) closeViewer(); });
+      resetWelcome();
+      resizeQuestion();
+    })();
+  </script>
+</body>
+</html>
