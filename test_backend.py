@@ -299,5 +299,38 @@ class SearchQueryIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(evidence.requests[1].user_context, ())
 
 
+class AdditionalLLMFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_invalid_draft_and_support_structures(self):
+        for malformed in ({"status": "unknown", "text": "x"},
+                          {"status": "answer", "text": "x", "claims": [{"text": "x"}]}):
+            with self.subTest(draft=malformed), self.assertRaises(UpstreamError):
+                await Assistant(FakeEvidence(), FakeLLM(malformed), Settings()).answer(ChatRequest(question="x"))
+        for malformed in ("not JSON", {}, {"supported": []}, {"supported": True, "extra": "x"}):
+            with self.subTest(support=malformed), self.assertRaises(UpstreamError):
+                await Assistant(FakeEvidence(), FakeLLM(draft(), malformed), Settings()).answer(ChatRequest(question="x"))
+
+    async def test_403_and_invalid_http_json(self):
+        real_client = httpx.AsyncClient
+        settings = Settings(llm_base_url="https://openrouter.ai/api/v1", llm_model="env-model", llm_api_key="test-only")
+        for mode in ("403", "invalid-json"):
+            calls = []
+            def handler(request):
+                calls.append(request)
+                self.assertEqual(str(request.url), "https://openrouter.ai/api/v1/chat/completions")
+                return httpx.Response(403 if mode == "403" else 200, text="not-json")
+            with self.subTest(mode=mode), patch("llm_client.httpx.AsyncClient",
+                    side_effect=lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw)):
+                with self.assertRaises(BackendUnavailable if mode == "403" else UpstreamError):
+                    await OpenAICompatibleClient(settings).complete([])
+                self.assertEqual(len(calls), 1)
+
+    async def test_missing_key_with_other_settings_present(self):
+        settings = Settings(llm_base_url="https://example.invalid/v1", llm_model="env-model")
+        with patch("llm_client.httpx.AsyncClient") as http_client:
+            with self.assertRaises(BackendUnavailable):
+                await OpenAICompatibleClient(settings).complete([])
+            http_client.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,14 +1,14 @@
 """PSB CSV entry point. No API server, fake retrieval, or package installation.
 
-History wire format in CSV is unspecified in the provided regulation. The default
-parser preserves the entire question; no role-label or delimiter heuristics.
-A confirmed decoder can be injected through parse_question without changing the
-answer workflow. Real search must be wired in dependencies.initialize_search.
+CSV dialogue labels are confirmed by official demo_questions.csv. Only complete
+alternating user/assistant turns are parsed; ambiguous input stays opaque.
+A different confirmed decoder can be injected without changing the answer workflow. Real search must be wired in dependencies.initialize_search.
 """
 import asyncio
 import csv
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Callable
@@ -45,7 +45,7 @@ def input_paths(data_dir: Path) -> tuple[Path, Path]:
 def read_questions(path: Path) -> list[tuple[str, str]]:
     rows = []
     seen = set()
-    with path.open(encoding="utf-8", newline="") as stream:
+    with path.open(encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream, strict=True)
         if not reader.fieldnames or len(reader.fieldnames) != len(set(reader.fieldnames)) or not {"id", "question"} <= set(reader.fieldnames):
             raise ValueError("questions.csv must contain unique id and question columns")
@@ -63,8 +63,22 @@ def read_questions(path: Path) -> list[tuple[str, str]]:
 
 
 def parse_question(raw: str) -> ChatRequest:
-    """Opaque CSV question, possibly including dialogue; no invented serialization."""
-    return ChatRequest(question=raw)
+    """Parse only the complete dialogue format observed in official demo CSV."""
+    matches = list(re.finditer(r"^(Пользователь|Ассистент):[ \t]*", raw, re.MULTILINE))
+    if len(matches) < 3 or raw[:matches[0].start()].strip():
+        return ChatRequest(question=raw)
+    turns = []
+    for index, match in enumerate(matches):
+        role = "user" if match.group(1) == "Пользователь" else "assistant"
+        expected = "user" if index % 2 == 0 else "assistant"
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(raw)
+        content = raw[match.end():end].strip()
+        if role != expected or not content:
+            return ChatRequest(question=raw)
+        turns.append({"role": role, "content": content})
+    if turns[-1]["role"] != "user":
+        return ChatRequest(question=raw)
+    return ChatRequest(question=turns[-1]["content"], history=turns[:-1])
 
 
 def format_submission_answer(result: AssistantResult) -> str:
