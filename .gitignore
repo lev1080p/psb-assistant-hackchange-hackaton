@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local submission output and platform input files
+/submission.csv
+/questions.csv
+/knowledge-base.zip
+/data/
