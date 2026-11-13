@@ -92,9 +92,12 @@ class CSVTests(unittest.TestCase):
         for status in ('clarification', 'insufficient'):
             self.assertEqual(format_submission_answer(AssistantResult(status=status, text='Пояснение')), 'Пояснение')
 
-    def test_opaque_history_is_not_split(self):
+    def test_official_dialogue_labels_are_parsed(self):
         raw = 'Пользователь: строка\nАссистент: строка\nПользователь: последняя строка'
-        self.assertEqual(parse_question(raw), ChatRequest(question=raw, history=[]))
+        request = parse_question(raw)
+        self.assertEqual(request.question, 'последняя строка')
+        self.assertEqual([m.role for m in request.history], ['user', 'assistant'])
+        self.assertEqual(request.history[0].content, 'строка')
 
     def test_citation_integrity(self):
         for source_id, quote in ((FRAGMENT.fragment_id, 'Маркер A'), ('invented', 'Маркер A'),
@@ -102,6 +105,18 @@ class CSVTests(unittest.TestCase):
             value = Draft(status='answer', text='Маркер A', claims=[{
                 'text': 'Маркер A', 'fragment_ids': [source_id], 'quotes': {source_id: quote}}])
             self.assertEqual(validate_citations(value, [FRAGMENT]), source_id == FRAGMENT.fragment_id and quote == 'Маркер A')
+
+
+    def test_utf8_bom_input(self):
+        path = self.make_csv([('001', 'Тестовый вопрос')])
+        path.write_bytes(b'\xef\xbb\xbf' + path.read_bytes())
+        self.assertEqual(read_questions(path), [('001', 'Тестовый вопрос')])
+
+    def test_ambiguous_dialogue_stays_opaque(self):
+        for raw in ('Обычная строка', 'Пользователь: один\nПользователь: два\nПользователь: три',
+                    'Введение\nПользователь: один\nАссистент: два\nПользователь: три'):
+            self.assertEqual(parse_question(raw).question, raw)
+            self.assertEqual(parse_question(raw).history, [])
 
 
 class BatchTests(unittest.IsolatedAsyncioTestCase):
@@ -155,6 +170,14 @@ class BatchTests(unittest.IsolatedAsyncioTestCase):
         await self.execute(question_parser=decoder)
         self.assertEqual({r.query: r.user_context[0] for r in self.calls},
                          {'encoded-a': 'context-encoded-a', 'encoded-b': 'context-encoded-b'})
+
+    async def test_official_dialogue_through_solution_to_search(self):
+        self.questions([('a', 'Пользователь: context-a\nАссистент: not-evidence\nПользователь: current-a'),
+                        ('b', 'current-b')])
+        await self.execute()
+        by_query = {q.query: q for q in self.calls}
+        self.assertEqual(by_query['current-a'].user_context, ('context-a',))
+        self.assertEqual(by_query['current-b'].user_context, ())
 
     async def test_missing_real_search_does_not_create_output(self):
         self.questions([('a', 'x')])

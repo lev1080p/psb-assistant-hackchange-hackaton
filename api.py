@@ -1,8 +1,9 @@
 """Run: uvicorn api:app. Inject real evidence/document providers via create_app."""
 import asyncio
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
+from starlette.staticfiles import StaticFiles
 from assistant import Assistant
 from config import Settings
 from dependencies import (BackendUnavailable, DocumentProvider, EvidenceProvider,
@@ -27,10 +28,22 @@ def create_app(*, evidence: EvidenceProvider | None = None,
                           llm if llm is not None else OpenAICompatibleClient(settings), settings)
     document_provider = documents if documents is not None else _missing_document
     app = FastAPI(title="Юридический ассистент")
+    static_dir = Path(__file__).parent / "web" / "static"
+    static_files = StaticFiles(directory=static_dir, check_dir=False)
+
+    @app.get("/style.css", include_in_schema=False)
+    @app.get("/app.js", include_in_schema=False)
+    async def static_asset(request: Request):
+        # Only these two fixed routes are exposed. StaticFiles also rejects
+        # resolved paths (including symlinks) outside its root.
+        return await static_files.get_response(request.url.path.lstrip("/"), request.scope)
 
     @app.get("/", include_in_schema=False)
     async def index():
-        return FileResponse(Path(__file__).parent / "web" / "static" / "index.html")
+        path = static_dir / "index.html"
+        if not path.is_file():
+            raise HTTPException(404, "Страница интерфейса не найдена")
+        return FileResponse(path)
 
     @app.post("/api/chat", response_model=AssistantResult)
     async def chat(request: ChatRequest):
