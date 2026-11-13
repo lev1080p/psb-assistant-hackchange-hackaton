@@ -51,6 +51,7 @@ button:focus-visible, textarea:focus-visible { outline: 3px solid #85adff; outli
 .message-type.insufficient { background: #eef0f5; color: #54627a; }
 .message-type.error { background: #fff0eb; color: #a74735; }
 .sources { margin-top: 18px; padding-top: 15px; border-top: 1px solid #e0e7f1; }
+.message-type + .sources { margin-top: 0; padding-top: 0; border-top: 0; }
 .sources-title { margin: 0 0 10px; color: #677994; font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
 .claim { padding: 12px 0; border-top: 1px solid #e8edf4; }
 .claim:first-of-type { border-top: 0; }

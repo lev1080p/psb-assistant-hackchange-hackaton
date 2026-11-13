@@ -69,13 +69,17 @@
     const row = text("div", "", "message assistant");
     const body = text("div", "", "message-body");
     row.append(text("div", "П", "avatar"), body);
-    const labels = { answer: "Ответ", clarification: "Нужно уточнение", insufficient: "Недостаточно оснований", error: "Ошибка соединения" };
+    const labels = { answer: "Ответ", clarification: "Нужно уточнение", insufficient: "Недостаточно оснований", error: "Ошибка" };
     const kind = result.status;
     body.append(text("div", labels[kind] || labels.answer, "message-type " + kind));
-    body.append(text("p", result.text, "message-text"));
+    // Current backend joins claim texts into text; keep a distinct summary if supplied later.
+    const joinedClaims = result.claims.map((claim) => claim.text).join("\n\n").trim();
+    if (kind !== "answer" || !result.claims.length || result.text.trim() !== joinedClaims) {
+      body.append(text("p", result.text, "message-text"));
+    }
     if (result.claims.length) {
       const claims = text("div", "", "sources");
-      claims.append(text("p", "Основания по выводам", "sources-title"));
+      claims.append(text("p", "Выводы и основания", "sources-title"));
       result.claims.forEach((claim) => {
         const block = text("div", "", "claim");
         block.append(text("p", claim.text, "message-text"));
@@ -139,8 +143,33 @@
     })) : [];
     return { status: resultStatus, text: answer.trim(), fragments, claims };
   }
+  function boundedHistory() {
+    let selected = history.slice(-24).map((message) => ({
+      role: message.role,
+      content: message.content.length > 4000
+        ? "[Начало сообщения опущено]\n" + message.content.slice(-3900)
+        : message.content
+    }));
+    while (selected.length && selected[0].role !== "user") selected.shift();
+    while (selected.length && JSON.stringify(selected).length > 12000) selected.splice(0, 2);
+    return selected;
+  }
+  function httpErrorMessage(statusCode, documentRequest = false) {
+    if (statusCode === 503) return documentRequest
+      ? "Просмотр полного документа пока не подключён."
+      : "Поиск или модель пока не подключены. Попробуйте позже.";
+    if (statusCode === 504) return documentRequest
+      ? "Время загрузки документа истекло."
+      : "Время обработки вопроса истекло. Попробуйте ещё раз.";
+    if (statusCode === 502) return documentRequest
+      ? "Не удалось загрузить документ из зависимого сервиса."
+      : "Зависимый сервис не ответил корректно. Попробуйте ещё раз.";
+    if (statusCode === 404 && documentRequest) return "Документ не найден.";
+    if (statusCode === 422) return "Сервер не принял вопрос. Попробуйте сократить его или начать новый диалог.";
+    return documentRequest ? "Не удалось загрузить полный текст документа." : "Не удалось получить ответ от сервера. Попробуйте ещё раз.";
+  }
   async function submitQuestion(value) {
-    const priorHistory = history.slice();
+    const priorHistory = boundedHistory();
     addUserMessage(value);
     question.value = "";
     pending = true;
@@ -163,19 +192,26 @@
         body: JSON.stringify({ question: value, history: priorHistory }),
         signal: controller.signal
       });
-      if (!response.ok) throw new Error("HTTP " + response.status);
+      if (!response.ok) {
+        const error = new Error(httpErrorMessage(response.status));
+        error.httpStatus = response.status;
+        throw error;
+      }
       const result = normalizeResponse(await response.json());
       if (activeRequest !== controller) return;
       loading.remove();
       addAssistantMessage(result);
       history.push({ role: "user", content: value }, { role: "assistant", content: result.text });
+      history = boundedHistory();
       setStatus("ready", "Ответ получен");
     } catch (error) {
       if (activeRequest !== controller) return;
       loading.remove();
-      const detail = error.name === "AbortError" ? "Сервер не ответил вовремя." : "Не удалось получить ответ от сервера.";
-      addAssistantMessage({ status: "error", text: detail + " Проверьте подключение и повторите вопрос.", fragments: [], claims: [] });
-      setStatus("error", "Нет ответа сервера");
+      const detail = error.name === "AbortError" ? "Сервер не ответил вовремя. Попробуйте ещё раз."
+        : error.httpStatus ? error.message
+        : "Не удалось связаться с сервером. Проверьте подключение и повторите вопрос.";
+      addAssistantMessage({ status: "error", text: detail, fragments: [], claims: [] });
+      setStatus("error", "Не удалось ответить");
     } finally {
       clearTimeout(timeout);
       if (activeRequest === controller) { activeRequest = null; pending = false; resizeQuestion(); question.focus(); }
@@ -183,13 +219,29 @@
   }
   function highlightDocument(container, fullText, fragment) {
     const quote = fragment.text;
-    let start = fragment.start;
-    let end = fragment.end;
-    if (start === null || end === null || start < 0 || end <= start || end > fullText.length || fullText.slice(start, end) !== quote) {
-      start = quote ? fullText.indexOf(quote) : -1;
-      end = start < 0 ? -1 : start + quote.length;
+    let start = -1;
+    let end = -1;
+    if (Number.isInteger(fragment.start) && Number.isInteger(fragment.end) && fragment.start >= 0 && fragment.end > fragment.start) {
+      // Source offsets refer to Python code points; DOM offsets use UTF-16.
+      const codePoints = Array.from(fullText);
+      if (fragment.end <= codePoints.length && codePoints.slice(fragment.start, fragment.end).join("") === quote) {
+        start = codePoints.slice(0, fragment.start).join("").length;
+        end = start + quote.length;
+      }
     }
-    if (start < 0) { container.textContent = fullText; return; }
+    if (start < 0 && quote) {
+      const first = fullText.indexOf(quote);
+      if (first >= 0 && fullText.indexOf(quote, first + 1) < 0) {
+        start = first;
+        end = first + quote.length;
+      } else {
+        const reason = first < 0
+          ? "Точный текст фрагмента не найден в документе. Положение показано выше без подсветки."
+          : "Фрагмент встречается в документе несколько раз. Положение показано выше без выбора произвольного места.";
+        container.append(text("p", reason, "viewer-note"));
+      }
+    }
+    if (start < 0) { container.append(document.createTextNode(fullText)); return; }
     container.append(document.createTextNode(fullText.slice(0, start)));
     const mark = text("mark", fullText.slice(start, end));
     container.append(mark, document.createTextNode(fullText.slice(end)));
@@ -221,15 +273,23 @@
     documentContent.append(text("p", "Загружаем документ…", "viewer-note"));
     try {
       const response = await fetch(documentApi + "/" + encodeURIComponent(fragment.document_id));
-      if (!response.ok) throw new Error("HTTP " + response.status);
+      if (!response.ok) {
+        const error = new Error(httpErrorMessage(response.status, true));
+        error.httpStatus = response.status;
+        throw error;
+      }
       const data = await response.json();
       const fullText = typeof data === "string" ? data : data.text;
       if (typeof fullText !== "string") throw new Error("Нет текста");
+      if (data && typeof data === "object" && data.document_id !== fragment.document_id) throw new Error("ID документа не совпадает");
       if (viewer.hidden || requestId !== viewerRequestId) return;
       documentContent.replaceChildren();
       highlightDocument(documentContent, fullText, fragment);
-    } catch (_) {
-      if (!viewer.hidden && requestId === viewerRequestId) documentContent.replaceChildren(text("p", "Полный текст документа пока недоступен. Выше показан переданный сервером фрагмент.", "viewer-note"));
+    } catch (error) {
+      if (!viewer.hidden && requestId === viewerRequestId) {
+        const message = error.httpStatus ? error.message : "Не удалось проверить полный текст документа. Положение показано выше.";
+        documentContent.replaceChildren(text("p", message, "viewer-note"));
+      }
     }
   }
   function closeViewer() {
